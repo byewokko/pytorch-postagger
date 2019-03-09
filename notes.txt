@@ -1,0 +1,32 @@
+
+word emb exploration (adding and subtr vectors)
+
+-----------
+
+implementing simple RNN
+
+implementing BiLSTM
+
+adding dropout
+
+network properties:
+    rnn size
+    rnn depth
+    rnn x lstm x bilstm
+
+explore results:
+    overall acc, prec...
+    results by class
+    !!!comment!!
+
+think about performance/time
+
+! dont' spend too much time on other hparams
+just make sure your learning rate works
+
+! compare networks with similar amount of params
+
+VG part:
+implementing a different kind of LSTM (peephole connection)
+
+chardmeier

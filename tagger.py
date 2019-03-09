@@ -5,7 +5,9 @@ import torch.optim as optim
 import torch.utils.data
 
 class RNNTagger(nn.Module):
-    def __init__(self, input_len, embedding, rnn_layer_size, rnn_layer_number, tagset_size, batch_size, **kwargs):
+    def __init__(self, input_len, embedding,
+                 rnn_layer_size, rnn_layer_number, tagset_size,
+                 batch_size, activation, **kwargs):
         super(RNNTagger, self).__init__()
 
         self.input_len = input_len
@@ -15,6 +17,7 @@ class RNNTagger(nn.Module):
         self.rnn_layer_number = rnn_layer_number
         self.batch_size = batch_size
         self.tagset_size = tagset_size
+        self.activation = activation
 
         self.__build_model()
 
@@ -27,7 +30,7 @@ class RNNTagger(nn.Module):
         self.hidden = self.init_hidden()
         self.dropout = nn.Dropout(0.5)
         self.dense = nn.Linear(self.rnn_layer_size, self.tagset_size)
-        self.softmax = nn.LogSoftmax(dim=1)
+        self.activation = self.activation(dim=1)
 
     def init_hidden(self, batch_size=None):
         """
@@ -43,9 +46,7 @@ class RNNTagger(nn.Module):
     def forward(self, X, lengths):
 
         X = self.word_emb(X)
-        # X = torch.nn.utils.rnn.pack_padded_sequence(X, lengths, batch_first=True)
         X, self.hidden = self.lstm(X, self.hidden)
-        # X, _ = torch.nn.utils.rnn.pad_packed_sequence(X, batch_first=True)
 
         # here we reshape the output of the BiLSTM
         X = X.contiguous()
@@ -56,7 +57,7 @@ class RNNTagger(nn.Module):
 
 
         X = self.dense(X)
-        X = self.softmax(X)
+        X = self.activation(X)
         X = X.view(-1, self.tagset_size)
         Y_h = X
         return Y_h
@@ -64,7 +65,9 @@ class RNNTagger(nn.Module):
 
 
 class LSTMTagger(nn.Module):
-    def __init__(self, input_len, embedding, rnn_layer_size, rnn_layer_number, tagset_size, batch_size, **kwargs):
+    def __init__(self, input_len, embedding,
+                 rnn_layer_size, rnn_layer_number, tagset_size,
+                 batch_size, **kwargs):
         super(LSTMTagger, self).__init__()
 
         self.input_len = input_len

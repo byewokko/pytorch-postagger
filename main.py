@@ -9,7 +9,6 @@ torch.manual_seed(123)
 
 import argparse
 import sys
-import reader
 from time import time
 
 import util
@@ -38,19 +37,27 @@ hparams = {
     # number of hidden layers
     # if you increase the number of hidden layers
     # you can add dropout in between them
-    "rnn_layer_number": 1,
+    "rnn_layer_number": 2,
 
     # length of input sentences
     # (shorter sentences are padded to match this length)
     # (do not change it)
     "input_len": 50,
 
+    # optimizer type
     "optimizer": optim.Adam,
 
+    # loss function
+    "loss_function": nn.NLLLoss(), # weight parameter
     "loss_function": nn.NLLLoss(),
 
-    "tagger": tagger.LSTMTagger,
+    # tagger type
+    #"tagger": tagger.LSTMTagger,
     "tagger": tagger.RNNTagger,
+
+    #"activation": nn.ReLU,
+    "activation": nn.LogSoftmax,
+    #"activation": nn.Sigmoid(),
 
 }
 
@@ -70,14 +77,14 @@ train_file = os.path.join(root_dir, data_dir, "train.txt")
 dev_file = os.path.join(root_dir, data_dir, "dev.txt")
 test_file = os.path.join(root_dir, data_dir, "test.txt")
 
+# TODO allow random embeddings
+def train_model(model, train_data, dev_data, number_of_epochs, loss_function, optimizer,
+                learning_rate, batch_size, **kwargs):
 
-
-
-
-def train_model(model, train_data, dev_data, number_of_epochs, loss_function, optimizer, learning_rate, batch_size, **kwargs):
-
+    # initialize the optimizer
     optimizer = optimizer(model.parameters(), lr=learning_rate)
 
+    # initialize DataLoaders that will yield data in batches
     train_loader = torch.utils.data.DataLoader(train_data,
                                               batch_size=batch_size,
                                               shuffle=True,
@@ -87,16 +94,15 @@ def train_model(model, train_data, dev_data, number_of_epochs, loss_function, op
                                             shuffle=False,
                                             num_workers=8)
 
-    train_batches = len(train_loader)
-    dev_batches = len(dev_loader)
-
+    n_train_batches = len(train_loader)
+    n_dev_batches = len(dev_loader)
 
     for epoch in range(number_of_epochs):
 
         print("epoch", epoch+1)
 
         for batch_n, (X, Y, sent_len) in enumerate(train_loader):
-            print("training   |{}|".format(util.loadbar(batch_n/(train_batches-1))), end="\r")
+            print("training   |{}|".format(util.loadbar(batch_n/(n_train_batches-1))), end="\r")
             sys.stdout.flush()
 
             # if len(sent_len) < model.batch_size:
@@ -116,7 +122,7 @@ def train_model(model, train_data, dev_data, number_of_epochs, loss_function, op
         print()
 
         for batch_n, (X, Y, sent_len) in enumerate(dev_loader):
-            print("validation |{}|".format(util.loadbar(batch_n /(dev_batches-1))), end="\r")
+            print("validation |{}|".format(util.loadbar(batch_n /(n_dev_batches-1))), end="\r")
             sys.stdout.flush()
 
             # if len(sent_len) < model.batch_size:
@@ -174,6 +180,8 @@ def main():
     model = hparams["tagger"](embedding=embeddings,
                               tagset_size=tagset_size,
                               **hparams)
+    print(sum(p.numel() for p in model.parameters() if p.requires_grad))
+    quit()
 
     train_model(model,
                 train_data=train_data,

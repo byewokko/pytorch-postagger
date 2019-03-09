@@ -125,9 +125,9 @@ def pad_sort_batch(batch):
 
     return batch_sorted
 
-def loadbar(percent, n_blocks=10):
+def loadbar(percent, n_blocks=15):
     percent = min(percent, 0.999999999)
-    blocks = [b for b in "-▏▎▍▌▋▊▉█"]
+    blocks = [b for b in "▏▎▍▌▋▊▉█"]
     whole = percent * n_blocks
     part = (whole - int(whole)) * len(blocks)
     #whole = int(whole)
