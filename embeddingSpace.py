@@ -1,7 +1,7 @@
 import sys
 import torch
 
-from util import load_embeddings
+from dataprep import load_embeddings
 
 class EmbeddingSpace():
     """

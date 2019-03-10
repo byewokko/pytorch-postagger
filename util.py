@@ -1,129 +1,86 @@
 import re
-import codecs
-import numpy as np
-import os
+import time
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
-def load_embeddings(filename):
+
+class Timer():
+    def __init__(self, n_last=0):
+        self.times = None
+        self.last = None
+        self.n_last = n_last
+
+    def start(self):
+        self.last = time.time()
+        self.times = []
+
+    def tick(self):
+        now = time.time()
+        self.times.append(now - self.last)
+        self.last = now
+
+    def get_average(self):
+        return sum(self.times[-self.n_last:]) / len(self.times[-self.n_last:])
+
+    def remaining(self, total_n):
+        if len(self.times) == 0:
+            return ""
+        n = total_n - len(self.times)
+        t = self.get_average() * n
+        h, t = int(t//3600), t%3600
+        m, s = int(t//60), int(t%60)
+        return f"{h:d}:{m:02d}:{s:02d} remaining"
+
+
+class ConfusionMatrix():
     """
-    Read text file with embeddings, return a {word: index} dict,
-    an {index: word} dict and embeddings FloatTensor
-    :param filename:
-    :return (word2ind, ind2word, embeddings):
+    Dimension 0 is predictions, dimension 1 is targets
     """
-    word2ind = {}
-    ind2word = {}
-    embeddings = []
-    with open(filename, "r") as f:
-        for line in f:
-            word, *emb_str = line.strip().split()
-            ind2word[len(word2ind)] = word
-            word2ind[word] = len(word2ind)
-            embeddings.append([float(s) for s in emb_str])
+    def __init__(self, n_classes):
+        self.n_classes = n_classes
+        self.matrix = torch.zeros((n_classes, n_classes), dtype=torch.float)
 
-    return word2ind, ind2word, torch.FloatTensor(embeddings)
+    def __repr__(self):
+        return repr(self.matrix.int())
 
-def vocab_from_traindata(traindata, emb_size, unk_rate=0.05):
-    """
-    Extract vocabulary from traindata, return a {word: index} dict,
-    an {index: word} dict and create a random embeddings FloatTensor
-    :param traindata:
-    :param unk_rate: fraction of words that will be treated as unknown
-    :return (word2ind, ind2word, embeddings):
-    """
-    word2ind = {}
-    ind2word = {}
-    embeddings = []
+    def __str__(self):
+        return str(self.matrix.int())
 
-    ###
+    def add(self, predictions, targets):
+        if predictions.numel() != targets.numel():
+            raise Exception("Matrices' dimensions don't match.")
+        predictions = predictions.view(-1)
+        targets = targets.view(-1)
+        for i in range(predictions.numel()):
+            self.matrix[predictions[i], targets[i]] += 1
 
-    return word2ind, ind2word, torch.FloatTensor(embeddings)
+    def accuracy(self):
+        return self.matrix.diag().sum() / self.matrix.sum()
 
+    def precision(self):
+        return self.matrix.diag() / self.matrix.sum(dim=0)
 
+    def recall(self):
+        return self.matrix.diag() / self.matrix.sum(dim=1)
 
-def load_postags(filename):
-    """
-    Read text file with POS tags, return a {tag: index} dict
-    plus an inverse dict
-    :param filename:
-    :return (tag2ind, ind2tag):
-    """
-    tag2ind = {}
-    ind2tag = {}
-    with open(filename, "r") as f:
-        for line in f:
-            word, *emb_str = line.strip().split()
-            ind2tag[len(tag2ind)] = word
-            tag2ind[word] = len(tag2ind)
+    def f_score(self, b2=1):
+        return (1 + b2) * self.precision() * self.recall() / (b2 * self.precision() + self.recall())
 
-    return tag2ind, ind2tag
-
-def normalize_line(line):
-    """
-
-    :param line:
-    :return:
-    """
-    line = line.strip()
-    line = re.sub("([0-9][0-9.,]*)", "0", line)  # Replace any number token by 0
-    return line
-
-def prepare_sent(line, word2i, tag2i, sent_maxlength):
-    # for any input preparation
-    return
-
-def prepare_data(filename, word2i, tag2i, sent_maxlength):
-    """
-    Load data and convert into tensors
-    :param filename:
-    :param word2i:
-    :param tag2i:
-    :param sent_maxlength:
-    :return (X_pad, Y_pad, Y):
-    """
-
-    data = []
-
-    with open(filename, "r") as f:
-        for line in f:
-            x = []
-            y = []
-            line = normalize_line(line)
-            for token in line.split(" "):
-                word, tag = token.split("_")
-                if word in word2i:
-                    x.append(word2i[word])
-                elif word.lower() in word2i:
-                    x.append(word2i[word.lower()])
-                else:
-                    x.append(word2i["<unk>"])
-                y.append(tag2i[tag])
-
-            data.append((F.pad(torch.LongTensor(x),
-                               pad = (0, (sent_maxlength - len(x))),
-                               mode = "constant",
-                               value = word2i["<P>"]),
-                        F.pad(torch.LongTensor(y),
-                               (0, (sent_maxlength - len(y))),
-                               mode = "constant",
-                               value = tag2i["<P>"]),
-                        len(x)))
-
-        #return torch.stack(X_pad), torch.stack(Y_pad), Y
-        return data
+    def print_stats(self, class_dict, fscore_b2=1):
+        precision = self.precision()
+        recall = self.recall()
+        f_score = self.f_score(b2=fscore_b2)
+        headline = f"Class\tPrec.\tRecall\tF-score (b2={fscore_b2})"
+        print(headline)
+        print(len(headline)*"-")
+        for i in range(self.n_classes):
+            print("{:s}\t{:.4f}\t{:.4f}\t{:.4f}".format(class_dict[i], precision[i], recall[i], f_score[i]))
+        print(len(headline)*"-")
+        print("Mean\t{:.4f}\t{:.4f}\t{:.4f}".format(precision.mean(), recall.mean(), f_score.mean()))
 
 
-def sort_batch(X, Y, L):
-    L_sorted, idx_sorted = L.sort(0, descending=True)
-    X_sorted = X[idx_sorted]
-    Y_sorted = Y[idx_sorted]
-    return X_sorted, Y_sorted, L_sorted
 
-def pad_sort_batch(batch):
 
-    return batch_sorted
 
 def loadbar(percent, n_blocks=15):
     percent = min(percent, 0.999999999)
