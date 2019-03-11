@@ -36,9 +36,11 @@ class ConfusionMatrix():
     """
     Dimension 0 is predictions, dimension 1 is targets
     """
-    def __init__(self, n_classes):
+    def __init__(self, n_classes, ignore_index=None):
         self.n_classes = n_classes
         self.matrix = torch.zeros((n_classes, n_classes), dtype=torch.float)
+        self.ignore_index = ignore_index
+        self.filter = torch.LongTensor([i for i in range(n_classes) if i is not ignore_index])
 
     def __repr__(self):
         return repr(self.matrix.int())
@@ -48,20 +50,23 @@ class ConfusionMatrix():
 
     def add(self, predictions, targets):
         if predictions.numel() != targets.numel():
-            raise Exception("Matrices' dimensions don't match.")
+            raise Exception("The dimensions of matrices do not match.")
         predictions = predictions.view(-1)
         targets = targets.view(-1)
         for i in range(predictions.numel()):
             self.matrix[predictions[i], targets[i]] += 1
 
     def accuracy(self):
-        return self.matrix.diag().sum() / self.matrix.sum()
+        matrix = self.matrix.index_select(0,self.filter).index_select(1,self.filter)
+        return matrix.diag().sum() / matrix.sum()
 
     def precision(self):
-        return self.matrix.diag() / self.matrix.sum(dim=0)
+        matrix = self.matrix.index_select(0, self.filter).index_select(1, self.filter)
+        return matrix.diag() / matrix.sum(dim=0)
 
     def recall(self):
-        return self.matrix.diag() / self.matrix.sum(dim=1)
+        matrix = self.matrix.index_select(0, self.filter).index_select(1, self.filter)
+        return matrix.diag() / matrix.sum(dim=1)
 
     def f_score(self, b2=1):
         return (1 + b2) * self.precision() * self.recall() / (b2 * self.precision() + self.recall())
@@ -73,12 +78,17 @@ class ConfusionMatrix():
         headline = f"Class\tPrec.\tRecall\tF-score (b2={fscore_b2})"
         print(headline)
         print(len(headline)*"-")
-        for i in range(self.n_classes):
-            print("{:s}\t{:.4f}\t{:.4f}\t{:.4f}".format(class_dict[i], precision[i], recall[i], f_score[i]))
+        for i, j in enumerate(item.item() for item in self.filter):
+            print("{:s}\t{:.4f}\t{:.4f}\t{:.4f}".format(class_dict[j], precision[i], recall[i], f_score[i]))
         print(len(headline)*"-")
         print("Mean\t{:.4f}\t{:.4f}\t{:.4f}".format(precision.mean(), recall.mean(), f_score.mean()))
 
-
+    def matrix_to_csv(self, class_dict, filename):
+        with open(filename, "w") as csv:
+            print(",".join([""] + [class_dict[i] for i in range(self.n_classes)]), file=csv)
+            for i in range(self.n_classes):
+                print(",".join([class_dict[i]] + [str(int(self.matrix[i, j])) for j in range(self.n_classes)]),
+                      file=csv)
 
 
 

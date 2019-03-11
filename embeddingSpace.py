@@ -1,7 +1,7 @@
 import sys
 import torch
 
-from dataprep import load_embeddings
+from datautil import load_embeddings
 
 class EmbeddingSpace():
     """
@@ -23,7 +23,7 @@ class EmbeddingSpace():
 
     def __getitem__(self, key):
         """
-        Returns embedding for a given word
+        Returns embedding vector for a given word
         :param key: word
         :return:
         """
@@ -34,14 +34,14 @@ class EmbeddingSpace():
 
     def get_empty(self):
         """
-        Retruns an all-zeros embedding tensor
+        Retruns an all-zeros embedding vector
         :return:
         """
         return torch.zeros(self.emb_size)
 
     def compute_distances(self, emb_point):
         """
-        Computes the cosine distance between a given embedding point
+        Computes the cosine distance between a given vector
         and all the words in the embedding space
         :param emb_point: nn.Tensor
         :return dists: nn.Tensor
@@ -77,14 +77,13 @@ class EmbeddingSpace():
 
 def main():
 
-    embs = EmbeddingSpace(sys.argv[1])
+    emb_file = sys.argv[1]
+    embeddings = EmbeddingSpace(emb_file)
 
-    point = embs["face"] - embs["mouth"]
-    results = embs.fetch_k_closest(point, k=10)
+    """
+    YOUR COMPUTATIONS HERE
+    """
 
-    print("COSSIM\tWORD")
-    for distance, word in results:
-        print("{:.4f}\t{:s}".format(distance, word))
 
 
 if __name__ == "__main__":

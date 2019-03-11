@@ -21,10 +21,10 @@ def parse_and_add(expr, embedding_space):
             operator = 1
         elif w == "-":
             operator = -1
-        elif re.match(r"\*-?[0-9]+(.[0-9]+)?", w):
-            operator = 1
-            factor = float(w[1:])
-            result *= factor
+        elif w == "*":
+            operator = "mult"
+        elif w == "/":
+            operator = "div"
 
         # otherwise we look up the embedding of the word
         # and add/subtract it to the result
@@ -34,7 +34,12 @@ def parse_and_add(expr, embedding_space):
             except KeyError:
                 print("'{}' is not in corpus.".format(w))
                 return None
-            result += operator * wemb
+            if operator == "mult":
+                result *= wemb
+            elif operator == "div":
+                result /= wemb
+            else:
+                result += operator * wemb
 
     return result[None, :]
 

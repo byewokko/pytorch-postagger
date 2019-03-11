@@ -1,0 +1,23 @@
+English (default, ~13k words)
+/nobackup/tmp/glove/english.glove.tiny.txt
+
+English
+Trained on Wiki + News (~400k words)
+/nobackup/tmp/glove/english.glove.6B.100d.txt
+/nobackup/tmp/glove/english.glove.6B.200d.txt
+/nobackup/tmp/glove/english.glove.6B.50d.txt
+
+Multilingual
+Combined from Parallel TED Corpus and English GloVe embeddings (~40k words)
+/nobackup/tmp/glove/multilingual_embeddings.ar.txt
+/nobackup/tmp/glove/multilingual_embeddings.de.txt
+/nobackup/tmp/glove/multilingual_embeddings.en.txt
+/nobackup/tmp/glove/multilingual_embeddings.es.txt
+/nobackup/tmp/glove/multilingual_embeddings.fr.txt
+/nobackup/tmp/glove/multilingual_embeddings.it.txt
+/nobackup/tmp/glove/multilingual_embeddings.nl.txt
+/nobackup/tmp/glove/multilingual_embeddings.pb.txt
+/nobackup/tmp/glove/multilingual_embeddings.pl.txt
+/nobackup/tmp/glove/multilingual_embeddings.ro.txt
+/nobackup/tmp/glove/multilingual_embeddings.ru.txt
+/nobackup/tmp/glove/multilingual_embeddings.tr.txt
