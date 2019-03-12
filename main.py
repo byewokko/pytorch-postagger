@@ -10,10 +10,11 @@ import util
 import tagger
 import datautil
 
+from util import stderr_print
+
 torch.manual_seed(123)
 
 evaluate_on_test_data = True
-perform_sanity_checks = True
 
 hyperparams = {
     # tagger type
@@ -36,11 +37,12 @@ hyperparams = {
     "rnn_layer_number": 1,
 
     # bidirectionality of rnn layer
-    "bidirectional": False,
+    "bidirectional": True,
 
     # RNN cell type
-    "cell_type": "BasicRNN",
+    "cell_type": "RNN_TANH",
     #"cell_type": "LSTM",
+    #"cell_type": "PEEP",  # Peephole cell (VG task only)
 
     # dropout
     "dropout_rate": 0.5,
@@ -50,7 +52,8 @@ hyperparams = {
     #"optimizer": optim.Adagrad,
 
     # loss function
-    "loss_function": nn.NLLLoss,
+    #"loss_function": nn.NLLLoss,
+    "loss_function": nn.CrossEntropyLoss,
     #"loss_function": "NLL",
     #"loss_function": "CrossEntropy",
 
@@ -72,8 +75,10 @@ dataparams = {
     "test_file": "test.txt",
 
     # embedding file
-    "emb_file": "embeddings/glove.txt",
+    #"emb_file": "embeddings/glove.txt",
     #"emb_file": "/nobackup/tmp/glove/english.glove.tiny.txt",
+    #"emb_file": "/nobackup/tmp/glove/multilingual_embeddings.en.txt",
+    "emb_file": "/nobackup/tmp/glove/english.glove.6B.50d.txt",
 
     # padding token
     "padding_token": "<PAD>",
@@ -124,7 +129,7 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
         train_confm = util.ConfusionMatrix(tagset_size, ignore_index=0)
 
         for batch_n, (X, Y, L) in enumerate(train_loader):
-            print("Epoch {:>3d}: Training   |{}| {}".format(epoch+1,
+            stderr_print("Epoch {:>3d}: Training   |{}| {}".format(epoch+1,
                                                             util.loadbar(batch_n/(n_train_batches-1)),
                                                             timer.remaining(total_iter)), end="\r")
             sys.stdout.flush()
@@ -145,7 +150,7 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
         dev_confm = util.ConfusionMatrix(tagset_size, ignore_index=0)
 
         for batch_n, (X, Y, L) in enumerate(dev_loader):
-            print("Epoch {:>3d}: Validation |{}| {}".format(epoch+1,
+            stderr_print("Epoch {:>3d}: Validation |{}| {}".format(epoch+1,
                                                             util.loadbar(batch_n/(n_dev_batches-1)),
                                                             timer.remaining(total_iter)), end="\r")
             sys.stdout.flush()
@@ -165,12 +170,15 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
 
             timer.tick()
 
-        print("\x1b[2K", end="")
+        stderr_print("\x1b[2K", end="")
         print("{:d}\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}".format(
             epoch+1, train_loss, dev_loss, train_confm.accuracy(), dev_confm.accuracy(),
             train_confm.f_score().mean(), dev_confm.f_score().mean()))
 
-        dev_confm.print_stats()
+        # TODO: append to training log
+
+    # TODO: revert to best model
+
 
 def predict(model, data, loss_function, batch_size, tagset_size, class_dict, **kwargs):
 
@@ -184,7 +192,7 @@ def predict(model, data, loss_function, batch_size, tagset_size, class_dict, **k
     confm = util.ConfusionMatrix(tagset_size, ignore_index=0)
 
     for batch_n, (X, Y, sent_len) in enumerate(dataloader):
-        print("Predicting |{}|".format(util.loadbar(batch_n / (n_batches - 1))), end="\r")
+        stderr_print("Predicting |{}|".format(util.loadbar(batch_n / (n_batches - 1))), end="\r")
         sys.stdout.flush()
 
         max_sent = max(sent_len)
@@ -198,8 +206,8 @@ def predict(model, data, loss_function, batch_size, tagset_size, class_dict, **k
         pred_tags = Y_h.max(dim=1)[1]
         confm.add(pred_tags, Y)
 
-    print("\x1b[2K", end="")
-    confm.print_stats(class_dict)
+    stderr_print("\x1b[2K", end="")
+    confm.print_class_stats(class_dict)
     confm.matrix_to_csv(class_dict, "confmat.csv")
 
 #######################################
@@ -209,23 +217,27 @@ def main():
     """
     Data preparation
     """
+
     # First we read the word embeddings file
     # This function returns a word-to-index dictionary and the embedding tensor
+    stderr_print("Loading embeddings ... ", end="")
     word2i, _, embeddings = datautil.load_embeddings(dataparams["emb_file"])
-    print("Embeddings loaded")
+    stderr_print("DONE")
 
-    # Load and index POS tags list
+    # Load and index POS tag list
+    stderr_print("Loading tagset ... ", end="")
     tag2i, i2tag = datautil.load_postags(dataparams["tag_file"])
     hyperparams["tagset_size"] = len(tag2i)
     hyperparams["padding_id"] = tag2i[dataparams["padding_token"]]
-    print("Tagset loaded")
+    stderr_print("DONE")
 
-    # Read data and create tensors
+    # Read and index data, create tensors
     # Each dataset is a tuple: (input_tensor, targets_tensor, sentence_length_tensor)
+    stderr_print("Loading datasets ... ", end="")
     train_data = datautil.prepare_data(dataparams["train_file"], word2i, tag2i, dataparams["input_len"])
     dev_data = datautil.prepare_data(dataparams["dev_file"], word2i, tag2i, dataparams["input_len"])
     test_data = datautil.prepare_data(dataparams["test_file"], word2i, tag2i, dataparams["input_len"])
-    print("Data loaded")
+    stderr_print("DONE")
 
     """
     Model preparation
@@ -233,12 +245,8 @@ def main():
     hyperparams["loss_function"] = hyperparams["loss_function"](ignore_index=tag2i[dataparams["padding_token"]])
 
     model = tagger.RNNTagger(embedding_tensor=embeddings, **hyperparams)
-    #model = tagger.LSTMTagger(embedding=embeddings, input_len=50, **hyperparams)
 
     print("Number of trainable parameters:", sum(p.numel() for p in model.parameters() if p.requires_grad))
-
-    if perform_sanity_checks:
-        pass # TODO
 
     train(model,
           train_data=train_data,

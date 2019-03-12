@@ -1,4 +1,5 @@
 import re
+import sys
 import time
 import torch
 import torch.nn.functional as F
@@ -36,6 +37,8 @@ class ConfusionMatrix():
     """
     Dimension 0 is predictions, dimension 1 is targets
     """
+
+    # TODO NaNs
     def __init__(self, n_classes, ignore_index=None):
         self.n_classes = n_classes
         self.matrix = torch.zeros((n_classes, n_classes), dtype=torch.float)
@@ -71,7 +74,7 @@ class ConfusionMatrix():
     def f_score(self, b2=1):
         return (1 + b2) * self.precision() * self.recall() / (b2 * self.precision() + self.recall())
 
-    def print_stats(self, class_dict, fscore_b2=1):
+    def print_class_stats(self, class_dict, fscore_b2=1):
         precision = self.precision()
         recall = self.recall()
         f_score = self.f_score(b2=fscore_b2)
@@ -99,3 +102,7 @@ def loadbar(percent, n_blocks=15):
     part = (whole - int(whole)) * len(blocks)
     #whole = int(whole)
     return int(whole)*"█" + blocks[int(part)] + int(n_blocks - int(whole) - 1)*"-"
+
+def stderr_print(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+    sys.stderr.flush()

@@ -39,22 +39,22 @@ class EmbeddingSpace():
         """
         return torch.zeros(self.emb_size)
 
-    def compute_distances(self, emb_point):
+    def compute_distances(self, emb_vector):
         """
         Computes the cosine distance between a given vector
         and all the words in the embedding space
-        :param emb_point: nn.Tensor
+        :param emb_vector: nn.Tensor
         :return dists: nn.Tensor
         """
         sys.stderr.write(f"Computing distances ... ")
         sys.stderr.flush()
 
         # transform 1-dim tensor into 2-dim
-        if emb_point.dim() == 1:
-            emb_point = emb_point[None, :]
+        if emb_vector.dim() == 1:
+            emb_vector = emb_vector[None, :]
 
         # compute cosine distance using matrix multiplication
-        p_norm = emb_point / emb_point.norm(dim=1)[:, None]
+        p_norm = emb_vector / emb_vector.norm(dim=1)[:, None]
         s_norm = self.emb_space / self.emb_space.norm(dim=1)[:, None]
         dists = torch.mm(p_norm, s_norm.transpose(0, 1))
         sys.stderr.write("DONE!\n")
@@ -62,15 +62,15 @@ class EmbeddingSpace():
 
         return dists
 
-    def fetch_k_closest(self, emb_point, k=10):
+    def fetch_k_closest(self, emb_vector, k=10):
         """
-        Fetches k closest words to a given embedding point.
+        Fetches k closest words to a given embedding vector.
         Returns a list of (cos_distance, word) tuples.
-        :param emb_point: nn.Tensor
+        :param emb_vector: nn.Tensor
         :param k: int
         :return results: list
         """
-        dists = self.compute_distances(emb_point)
+        dists = self.compute_distances(emb_vector)
         dist, ind = torch.topk(dists, k, largest=True, sorted=True)
         return [(d.item(), self.i2word[i.item()]) for (d, i) in zip(dist[0], ind[0])]
 
@@ -78,12 +78,15 @@ class EmbeddingSpace():
 def main():
 
     emb_file = sys.argv[1]
-    embeddings = EmbeddingSpace(emb_file)
 
-    """
-    YOUR COMPUTATIONS HERE
-    """
+    # Initialize EmbeddingSpace. This takes time. You can import the EmbeddingSpace class into an
+    # interactive environment to prevent reloading the embedding file every time you want to run
+    # a computation.
+    embedding = EmbeddingSpace(emb_file)
 
+    dog = embedding["dog"]
+    dog_similar = embedding.fetch_k_closest(dog)
+    print(dog_similar)
 
 
 if __name__ == "__main__":

@@ -29,4 +29,6 @@ just make sure your learning rate works
 VG part:
 implementing a different kind of LSTM (peephole connection)
 
+Class weighting?
+
 chardmeier
