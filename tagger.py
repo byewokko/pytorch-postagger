@@ -8,26 +8,42 @@ import torch.utils.data
 class PeepholeCell(nn.Module):
     def __init__(self, input_size, hidden_size):
         super(PeepholeCell, self).__init__()
-        self.w_ih = nn.Parameter(torch.zeros(hidden_size, input_size))
-        self.w_hh = nn.Parameter(torch.zeros(hidden_size, hidden_size))
-        self.w_ch = nn.Parameter(torch.zeros(hidden_size, hidden_size))
-        self.w_c2h = nn.Parameter(torch.zeros(hidden_size, hidden_size))
-        self.b_ih = nn.Parameter(torch.zeros(hidden_size))
-        self.b_hh = nn.Parameter(torch.zeros(hidden_size))
-        self.b_ch = nn.Parameter(torch.zeros(hidden_size))
-        self.b_c2h = nn.Parameter(torch.zeros(hidden_size))
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.w_ii = nn.Parameter(torch.zeros(hidden_size, input_size))
+        self.w_hi = nn.Parameter(torch.zeros(hidden_size, hidden_size))
+        self.w_ci = nn.Parameter(torch.zeros(hidden_size, hidden_size))
+        self.w_if = nn.Parameter(torch.zeros(hidden_size, input_size))
+        self.w_hf = nn.Parameter(torch.zeros(hidden_size, hidden_size))
+        self.w_cf = nn.Parameter(torch.zeros(hidden_size, hidden_size))
+        self.w_ic = nn.Parameter(torch.zeros(hidden_size, input_size))
+        self.w_hc = nn.Parameter(torch.zeros(hidden_size, hidden_size))
+        self.w_io = nn.Parameter(torch.zeros(hidden_size, input_size))
+        self.w_ho = nn.Parameter(torch.zeros(hidden_size, hidden_size))
+        self.w_cyo = nn.Parameter(torch.zeros(hidden_size, hidden_size))
 
-    def forward(self, input, hx = None):
+        self.b_ii = nn.Parameter(torch.zeros(hidden_size))
+        self.b_hi = nn.Parameter(torch.zeros(hidden_size))
+        self.b_ci = nn.Parameter(torch.zeros(hidden_size))
+        self.b_cf = nn.Parameter(torch.zeros(hidden_size))
+        self.b_if = nn.Parameter(torch.zeros(hidden_size))
+        self.b_hf = nn.Parameter(torch.zeros(hidden_size))
+        self.b_ic = nn.Parameter(torch.zeros(hidden_size))
+        self.b_hc = nn.Parameter(torch.zeros(hidden_size))
+        self.b_io = nn.Parameter(torch.zeros(hidden_size))
+        self.b_ho = nn.Parameter(torch.zeros(hidden_size))
+        self.b_cyo = nn.Parameter(torch.zeros(hidden_size))
 
+    def peephole_cell(self, input, hx = None):
         if hx is None:
             hx = input.new_zeros(input.size(0), self.hidden_size, requires_grad=False)
             hx = (hx, hx)
 
         hx, cx = hx
 
-        ingate = F.linear(input, self.w_ih, self.b_ih) + F.linear(hx, self.w_hh, self.b_hh) + F.linear(cx, self.w_ch, self.b_ch)
-        forgetgate = F.linear(input, self.w_ih, self.b_ih) + F.linear(hx, self.w_hh, self.b_hh) + F.linear(cx, self.w_ch, self.b_ch)
-        cellgate = F.linear(input, self.w_ih, self.b_ih) + F.linear(hx, self.w_hh, self.b_hh)
+        ingate = F.linear(input, self.w_ii, self.b_ii) + F.linear(hx, self.w_hi, self.b_hi) + F.linear(cx, self.w_ci, self.b_ci)
+        forgetgate = F.linear(input, self.w_if, self.b_if) + F.linear(hx, self.w_hf, self.b_hf) + F.linear(cx, self.w_cf, self.b_cf)
+        cellgate = F.linear(input, self.w_ic, self.b_ic) + F.linear(hx, self.w_hc, self.b_hc)
 
         ingate = torch.sigmoid(ingate)
         forgetgate = torch.sigmoid(forgetgate)
@@ -35,12 +51,22 @@ class PeepholeCell(nn.Module):
 
         cy = (forgetgate * cx) + (ingate * cellgate)
 
-        outgate = F.linear(input, self.w_ih, self.b_ih) + F.linear(hx, self.w_hh, self.b_hh) + F.linear(cy, self.w_c2h, self.b_c2h)
+        outgate = F.linear(input, self.w_io, self.b_io) + F.linear(hx, self.w_ho, self.b_ho) + F.linear(cy, self.w_cyo, self.b_cyo)
         outgate = torch.sigmoid(outgate)
 
         hy = outgate * torch.tanh(cy)
 
         return hy, cy
+
+    def forward(self, X, hx = None):
+        hx = torch.randn(X.size(1), self.hidden_size)
+        cx = torch.randn(X.size(1), self.hidden_size)
+        out = []
+        for i in X:
+            hx, cx = self.peephole_cell(i, (hx, cx))
+            out.append(hx)
+        X = torch.stack(out)
+        return X
 
 
 class RNNTagger(nn.Module):
@@ -49,7 +75,7 @@ class RNNTagger(nn.Module):
         super(RNNTagger, self).__init__()
 
         self.embedding = embedding_tensor
-        self.embedding_size = embedding_tensor.size(1)
+        self.embedding_dim = embedding_tensor.size(1)
         self.rnn_layer_size = rnn_layer_size
         self.rnn_layer_number = rnn_layer_number
         self.dropout_rate = dropout_rate
@@ -67,17 +93,15 @@ class RNNTagger(nn.Module):
 
     def __build_model(self):
         self.embedding_layer = nn.Embedding.from_pretrained(self.embedding)
-
         if self.cell_type == "PEEP":
-            self.peephole_cell = PeepholeCell(self.embedding_size, self.rnn_layer_size)
+            self.peephole_cell = PeepholeCell(self.embedding_dim, self.rnn_layer_size)
         else:
             self.rnn_layer = nn.RNNBase(mode=self.cell_type,
-                                        input_size=self.embedding_size,
+                                        input_size=self.embedding_dim,
                                         hidden_size=self.rnn_layer_size,
                                         num_layers=self.rnn_layer_number,
                                         bidirectional=self.bidirectional,
                                         batch_first=True)
-
         self.hidden_layer = None
         self.dropout_layer = nn.Dropout(self.dropout_rate)
         self.dense_layer = nn.Linear(self.rnn_out_size, self.tagset_size)
@@ -126,6 +150,7 @@ class RNNTagger(nn.Module):
         # layer, which replaces each word index by its corresponding embedding vector.
 
         X = self.embedding_layer(X)
+        #raise NotImplementedError("Insert embedding layer here.")
 
         # X is now a 3-dimensional tensor with shape (batch_size, max_sequence_length,
         # embedding_size).
@@ -139,18 +164,12 @@ class RNNTagger(nn.Module):
             # RNN framework and that would be very difficult.) We continually collect the output
             # in a list and then stack it back into a tensor.
 
-            # First we initialize the hidden states and cell states
-            hx = torch.randn(X.size(1), self.rnn_layer_size)
-            cx = torch.randn(X.size(1), self.rnn_layer_size)
-            out = []
-            for i in X:
-                hx, cx = self.peephole_cell(i, (hx, cx))
-                out.append(hx)
-            X = torch.stack(out)
+            X = self.peephole_cell(X)
 
         else:
             #
             X = torch.nn.utils.rnn.pack_padded_sequence(X, lengths, batch_first=True)
+            #raise NotImplementedError("Insert RNN layer here")
             X, self.hidden_layer = self.rnn_layer(X, self.hidden_layer)
             X, _ = torch.nn.utils.rnn.pad_packed_sequence(X, batch_first=True)
 
@@ -162,7 +181,10 @@ class RNNTagger(nn.Module):
         # Add dropout
         X = self.dropout_layer(X)
 
+        #raise NotImplementedError("Insert dense layer here.")
         X = self.dense_layer(X)
+
+        #raise NotImplementedError("Insert activation layer here.")
         X = self.activation_layer(X)
         X = X.view(-1, self.tagset_size)
         Y_h = X

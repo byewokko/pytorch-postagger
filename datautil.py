@@ -80,6 +80,8 @@ def prepare_data(filename, word2i, tag2i, sent_maxlength, padding=None):
     data = []
     with open(filename, "r") as f:
         for line in f:
+            if not line.strip():
+                continue
             x = []
             y = []
             line = normalize_line(line)
