@@ -10,18 +10,30 @@ class PeepholeCell(nn.Module):
         super(PeepholeCell, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.w_ii = nn.Parameter(torch.zeros(hidden_size, input_size))
-        self.w_hi = nn.Parameter(torch.zeros(hidden_size, hidden_size))
-        self.w_ci = nn.Parameter(torch.zeros(hidden_size, hidden_size))
-        self.w_if = nn.Parameter(torch.zeros(hidden_size, input_size))
-        self.w_hf = nn.Parameter(torch.zeros(hidden_size, hidden_size))
-        self.w_cf = nn.Parameter(torch.zeros(hidden_size, hidden_size))
-        self.w_ic = nn.Parameter(torch.zeros(hidden_size, input_size))
-        self.w_hc = nn.Parameter(torch.zeros(hidden_size, hidden_size))
-        self.w_io = nn.Parameter(torch.zeros(hidden_size, input_size))
-        self.w_ho = nn.Parameter(torch.zeros(hidden_size, hidden_size))
-        self.w_cyo = nn.Parameter(torch.zeros(hidden_size, hidden_size))
 
+        # Define the trainable parameters.
+        # All the parameter matrices have dimension 'out_size x in_size'.
+        
+        # Weights for ingate
+        self.w_ii = nn.Parameter(torch.zeros(hidden_size, input_size))   # from input
+        self.w_hi = nn.Parameter(torch.zeros(hidden_size, hidden_size))  # from hidden
+        self.w_ci = nn.Parameter(torch.zeros(hidden_size, hidden_size))  # from old cell state
+
+        # Weights for forgetgate
+        self.w_if = nn.Parameter(torch.zeros(hidden_size, input_size))   # from input
+        self.w_hf = nn.Parameter(torch.zeros(hidden_size, hidden_size))  # from hidden
+        self.w_cf = nn.Parameter(torch.zeros(hidden_size, hidden_size))  # from old cell state
+
+        # Weights for proposed cell state
+        self.w_ic = nn.Parameter(torch.zeros(hidden_size, input_size))   # from input
+        self.w_hc = nn.Parameter(torch.zeros(hidden_size, hidden_size))  # from hidden
+
+        # Weights for outgate
+        self.w_io = nn.Parameter(torch.zeros(hidden_size, input_size))   # from input
+        self.w_ho = nn.Parameter(torch.zeros(hidden_size, hidden_size))  # from hidden
+        self.w_cyo = nn.Parameter(torch.zeros(hidden_size, hidden_size)) # from new cell state
+
+        # Bias vectors have dimension 'out_size'.
         self.b_ii = nn.Parameter(torch.zeros(hidden_size))
         self.b_hi = nn.Parameter(torch.zeros(hidden_size))
         self.b_ci = nn.Parameter(torch.zeros(hidden_size))
