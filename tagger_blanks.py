@@ -53,19 +53,21 @@ class PeepholeCell(nn.Module):
 
         hx, cx = hx
 
-        ingate = F.linear(input, self.w_ii, self.b_ii) + F.linear(hx, self.w_hi, self.b_hi) + F.linear(cx, self.w_ci, self.b_ci)
+        # NOTE: The following line computes the ingate without the peephole connection.
+        # You will have to add the peephole connection yourself.
+        ingate = F.linear(input, self.w_ii, self.b_ii) + F.linear(hx, self.w_hi, self.b_hi)
         ingate = torch.sigmoid(ingate)
 
-        forgetgate = F.linear(input, self.w_if, self.b_if) + F.linear(hx, self.w_hf, self.b_hf) + F.linear(cx, self.w_cf, self.b_cf)
-        forgetgate = torch.sigmoid(forgetgate)
+        raise NotImplementedError("Calculate forgetgate here. Follow the structure of the ingate.")
 
+        # NOTE: The following line computes the proposed_cellstate without the peephole connection.
+        # You will have to add the peephole connection yourself.
         proposed_cellstate = F.linear(input, self.w_ic, self.b_ic) + F.linear(hx, self.w_hc, self.b_hc)
         proposed_cellstate = torch.tanh(proposed_cellstate)
 
         cy = (forgetgate * cx) + (ingate * proposed_cellstate)
 
-        outgate = F.linear(input, self.w_io, self.b_io) + F.linear(hx, self.w_ho, self.b_ho) + F.linear(cy, self.w_cyo, self.b_cyo)
-        outgate = torch.sigmoid(outgate)
+        raise NotImplementedError("Calculate outgate here. Follow the structure of the gates above.")
 
         hy = outgate * torch.tanh(cy)
 
@@ -116,7 +118,6 @@ class RNNTagger(nn.Module):
                                         bidirectional=self.bidirectional,
                                         batch_first=True)
         self.hidden_layer = None
-        self.dropout_layer = nn.Dropout(self.dropout_rate)
         self.dense_layer = nn.Linear(self.rnn_out_size, self.tagset_size)
         self.activation_layer = self.activation(dim=1)
 
@@ -131,14 +132,16 @@ class RNNTagger(nn.Module):
             # A bidirectional RNN has more hidden layers than a regular one-way RNN.
             # For each "left-to-right" layer there is one "right-to-left" layer.
             ##################
-            #raise NotImplementedError
-            rnn_layer_number = 2 * self.rnn_layer_number
+
+            raise NotImplementedError
+
         else:
             rnn_layer_number = self.rnn_layer_number
 
         if self.cell_type == "RNN_TANH":
             hidden = torch.randn(rnn_layer_number, batch_size, self.rnn_layer_size)
             self.hidden_layer = hidden
+
         elif self.cell_type == "LSTM":
             ##################
             # YOUR CODE HERE
@@ -146,10 +149,8 @@ class RNNTagger(nn.Module):
             # it stores the memory state of the cells. The nn.LSTM class handles the
             # hidden and cell layer in one tuple.
             ##################
-            #raise NotImplementedError
-            hidden = torch.randn(rnn_layer_number, batch_size, self.rnn_layer_size)
-            cell = torch.randn(rnn_layer_number, batch_size, self.rnn_layer_size)
-            self.hidden_layer = hidden, cell
+
+            raise NotImplementedError
 
     def forward(self, X, lengths):
         """
@@ -157,15 +158,15 @@ class RNNTagger(nn.Module):
         through the network. Here we plug in the layers defined in the __build_model
         function above.
         """
-        sequence_length = X.size(1)
+
         # At this moment the input is a batch of word sequences, where each word is
         # represented by its index (an integer). So the X input is a 2-dimensional tensor
         # with shape (batch_size, sequence_length).
 
         # To get a better representation of the words, we pass the input through the embedding
         # layer, which replaces each word index by its corresponding embedding vector.
-        X = self.embedding_layer(X)
-        #raise NotImplementedError("Insert embedding layer here.")
+
+        raise NotImplementedError("Insert embedding layer here.")
 
         # X is now a 3-dimensional tensor with shape (batch_size, sequence_length,
         # embedding_size).
@@ -186,8 +187,9 @@ class RNNTagger(nn.Module):
             # After passing through the RNN layer we unpack the sequences and re-pad them.
 
             X = torch.nn.utils.rnn.pack_padded_sequence(X, lengths, batch_first=True)
-            #raise NotImplementedError("Insert RNN layer here")
-            X, self.hidden_layer = self.rnn_layer(X, self.hidden_layer)
+
+            raise NotImplementedError("Insert RNN layer here")
+
             X, _ = torch.nn.utils.rnn.pad_packed_sequence(X, batch_first=True)
 
         # The shape of the output of the RNN layer is (batch_size, max_sentence_len, rnn_layer_size).
@@ -199,22 +201,16 @@ class RNNTagger(nn.Module):
         # contents, it only reorganizes the underlying data structure. It is a necessary step before
         # reshaping the tensor. Simply call the .contiguous() method on the tensor.
 
-        #raise NotImplementedError("Make the X tensor contiguous.")
-        X = X.contiguous()
+        raise NotImplementedError("Make the X tensor contiguous.")
 
-        #raise NotImplementedError("Reshape the X tensor using view().")
-        X = X.view(-1, X.shape[2])
-
-        # Add dropout
-        X = self.dropout_layer(X)
+        raise NotImplementedError("Reshape the X tensor using view().")
 
         # The last step is passing the tensor through the dense layer and the activation function.
         # The shape of the output will be (batch_size * sequence_length, tagset_size).
-        #raise NotImplementedError("Insert dense layer here.")
-        X = self.dense_layer(X)
 
-        #raise NotImplementedError("Insert activation layer here.")
-        X = self.activation_layer(X)
+        raise NotImplementedError("Insert dense layer here.")
+
+        raise NotImplementedError("Insert activation layer here.")
 
         # Finally, we flatten the output for easier loss analysis.
         X = X.view(-1, self.tagset_size)

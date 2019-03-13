@@ -13,13 +13,13 @@ from util import stderr_print
 
 torch.manual_seed(123)
 
-evaluate_on_test_data = True
+evaluate_on_test_data = False
 
 # The hyperparameter dictionary contains parameters related to the network
 
 hyperparams = {
     # learning rate
-    "learning_rate": 0.02,
+    "learning_rate": 0.01,
 
     # numbers of the training epochs
     "number_of_epochs": 8,
@@ -53,7 +53,7 @@ hyperparams = {
     #"loss_function": nn.CrossEntropyLoss,
 
     # activation function
-    "activation": nn.Softmax,
+    #"activation": nn.Softmax,
     "activation": nn.LogSoftmax,
 }
 
@@ -292,6 +292,8 @@ def main():
             **dataparams)
 
     if evaluate_on_test_data:
+        print()
+        print("Evaluating on test data.")
         predict(model, data=dev_data, class_dict=i2tag, **hyperparams)
 
 if __name__ == "__main__":
