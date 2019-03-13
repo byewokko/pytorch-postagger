@@ -19,7 +19,7 @@ evaluate_on_test_data = True
 
 hyperparams = {
     # learning rate
-    "learning_rate": 0.01,
+    "learning_rate": 0.02,
 
     # numbers of the training epochs
     "number_of_epochs": 8,
@@ -53,6 +53,7 @@ hyperparams = {
     #"loss_function": nn.CrossEntropyLoss,
 
     # activation function
+    "activation": nn.Softmax,
     "activation": nn.LogSoftmax,
 }
 
@@ -118,10 +119,13 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
     total_iter = number_of_epochs*(n_train_batches + n_dev_batches)
 
     training_log = []
+    best_model = (None, None)
 
     timer = util.Timer()
     timer.start()
 
+    print("Training started.")
+    print()
     print("epoch\ttr_loss\tvl_loss\ttr_acc\tvl_acc\ttr_f1\tvl_f1")
 
     for epoch in range(1, number_of_epochs + 1):
@@ -146,7 +150,7 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
             # Here we get the indices of the highest scoring predictions
             # and add them to a confusion matrix
             pred_tags = Y_h.max(dim=1)[1]
-            train_confm.add(pred_tags, Y)
+            train_confm.add(pred_tags, Y.view(-1))
 
             # We compute the loss and update the weights with gradient descent
             train_loss = loss_function(Y_h, Y.view(-1))
@@ -158,6 +162,8 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
         dev_confm = util.ConfusionMatrix(tagset_size, ignore_index=0)
 
         # Validation minibatch loop
+        # It has the same flow as the training loop above, with the exception
+        # of using torch.no_grad() to prevent modifying the weights
         for batch_n, (X, Y, L) in enumerate(dev_loader):
             stderr_print("Epoch {:>3d}: Validation |{}| {}".format(epoch,
                                                             util.loadbar(batch_n/(n_dev_batches-1)),
@@ -185,9 +191,20 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
         print("{epoch:d}\t{train_loss:.4f}\t{dev_loss:.4f}\t{train_acc:.4f}\t"
               "{dev_acc:.4f}\t{train_f1:.4f}\t{dev_f1:.4f}".format(**results))
 
+        # Save the current model if has the lowest validation loss
+        if best_model[0] is None or best_model[0] > results["dev_loss"]:
+            torch.save(model, f"{output_dir}/{TIMESTAMP}-best.bin")
+            best_model = (results["dev_loss"], epoch)
+
+    print()
     print("Training finished in {:02d}:{:02d}:{:02d}.".format(*timer.since_start()))
 
-    # TODO: revert to best model
+    torch.save(model, f"{output_dir}/{TIMESTAMP}-final.bin")
+    if best_model[1] != epoch:
+        print("Loading model with the lowest validation loss (Epoch {}).".format(best_model[1]))
+        model = torch.load(f"{output_dir}/{TIMESTAMP}-best.bin")
+
+    return model, training_log
 
 
 def predict(model, data, loss_function, batch_size, tagset_size, class_dict, output_dir=None, **kwargs):
@@ -257,15 +274,18 @@ def main():
 
     model = tagger.RNNTagger(embedding_tensor=embeddings, **hyperparams)
 
+    print()
     print("Number of trainable parameters:", sum(p.numel() for p in model.parameters() if p.requires_grad))
 
-    train(model,
+    model, training_log = train(model,
           train_data=train_data,
           dev_data=dev_data,
           class_dict=i2tag,
           **hyperparams,
           **dataparams)
 
+    print()
+    print("Evaluating on dev data.")
     predict(model, data=dev_data,
             class_dict=i2tag,
             **hyperparams,

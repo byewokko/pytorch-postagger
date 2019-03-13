@@ -141,7 +141,10 @@ class RNNTagger(nn.Module):
             self.hidden_layer = hidden
         elif self.cell_type == "LSTM":
             ##################
-            # YOUR CODE HERE #
+            # YOUR CODE HERE
+            # LSTM layer uses one more layer tier than basic RNN layer, in which
+            # it stores the memory state of the cells. The nn.LSTM class handles the
+            # hidden and cell layer in one tuple.
             ##################
             #raise NotImplementedError
             hidden = torch.randn(rnn_layer_number, batch_size, self.rnn_layer_size)
@@ -154,51 +157,66 @@ class RNNTagger(nn.Module):
         through the network. Here we plug in the layers defined in the __build_model
         function above.
         """
-
+        sequence_length = X.size(1)
         # At this moment the input is a batch of word sequences, where each word is
         # represented by its index (an integer). So the X input is a 2-dimensional tensor
-        # with shape (batch_size, max_sequence_length).
+        # with shape (batch_size, sequence_length).
 
         # To get a better representation of the words, we pass the input through the embedding
         # layer, which replaces each word index by its corresponding embedding vector.
-
         X = self.embedding_layer(X)
         #raise NotImplementedError("Insert embedding layer here.")
 
-        # X is now a 3-dimensional tensor with shape (batch_size, max_sequence_length,
+        # X is now a 3-dimensional tensor with shape (batch_size, sequence_length,
         # embedding_size).
 
         # Now we pass X to the recurrent layer.
 
         if self.cell_type == "PEEP":
             # Only used in VG task
-            # We need to loop through the input row-by-row instead of processing the whole
-            # batch tensor. (Because otherwise we would need to weave our peephole cell into the PyTorch
-            # RNN framework and that would be very difficult.) We continually collect the output
-            # in a list and then stack it back into a tensor.
-
             X = self.peephole_cell(X)
 
         else:
-            #
+            # This part looks more complex than it really is. Since we process our data in
+            # minibatches and the sentences have varying lengths, they have been all right-padded
+            # with zeros to evenly fit into a tensor. We don't want the RNN layer to waste its power
+            # on processing zeros, so here we pack the padded sequences into one, skipping all
+            # the padding zeros. The lengths vector gives us the information about what the useful
+            # data is and what is the padding.
+            # After passing through the RNN layer we unpack the sequences and re-pad them.
+
             X = torch.nn.utils.rnn.pack_padded_sequence(X, lengths, batch_first=True)
             #raise NotImplementedError("Insert RNN layer here")
             X, self.hidden_layer = self.rnn_layer(X, self.hidden_layer)
             X, _ = torch.nn.utils.rnn.pad_packed_sequence(X, batch_first=True)
 
-        # Now we reshape the output of the BiLSTM
-        # First it needs to me made contiguous
+        # The shape of the output of the RNN layer is (batch_size, max_sentence_len, rnn_layer_size).
+        # To be able to pass the tensor on to the dense (linear) layer, we need to reshape it by
+        # collapsing the first two dimensions. Use the .view() method to do that.
+        # The new shape of the output should be (batch_size * max_sentence_len, rnn_layer_size).
+
+        # However, first the tensor needs to me made contiguous. This does not affect its shape nor
+        # contents, it only reorganizes the underlying data structure. It is a necessary step before
+        # reshaping the tensor. Simply call the .contiguous() method on the tensor.
+
+        #raise NotImplementedError("Make the X tensor contiguous.")
         X = X.contiguous()
+
+        #raise NotImplementedError("Reshape the X tensor using view().")
         X = X.view(-1, X.shape[2])
 
         # Add dropout
         X = self.dropout_layer(X)
 
+        # The last step is passing the tensor through the dense layer and the activation function.
+        # The shape of the output will be (batch_size * sequence_length, tagset_size).
         #raise NotImplementedError("Insert dense layer here.")
         X = self.dense_layer(X)
 
         #raise NotImplementedError("Insert activation layer here.")
         X = self.activation_layer(X)
+
+        # Finally, we flatten the output for easier loss analysis.
         X = X.view(-1, self.tagset_size)
         Y_h = X
 
