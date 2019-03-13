@@ -42,14 +42,15 @@ class PeepholeCell(nn.Module):
         hx, cx = hx
 
         ingate = F.linear(input, self.w_ii, self.b_ii) + F.linear(hx, self.w_hi, self.b_hi) + F.linear(cx, self.w_ci, self.b_ci)
-        forgetgate = F.linear(input, self.w_if, self.b_if) + F.linear(hx, self.w_hf, self.b_hf) + F.linear(cx, self.w_cf, self.b_cf)
-        cellgate = F.linear(input, self.w_ic, self.b_ic) + F.linear(hx, self.w_hc, self.b_hc)
-
         ingate = torch.sigmoid(ingate)
-        forgetgate = torch.sigmoid(forgetgate)
-        cellgate = torch.tanh(cellgate)
 
-        cy = (forgetgate * cx) + (ingate * cellgate)
+        forgetgate = F.linear(input, self.w_if, self.b_if) + F.linear(hx, self.w_hf, self.b_hf) + F.linear(cx, self.w_cf, self.b_cf)
+        forgetgate = torch.sigmoid(forgetgate)
+
+        proposed_cellstate = F.linear(input, self.w_ic, self.b_ic) + F.linear(hx, self.w_hc, self.b_hc)
+        proposed_cellstate = torch.tanh(cellgate)
+
+        cy = (forgetgate * cx) + (ingate * proposed_cellstate)
 
         outgate = F.linear(input, self.w_io, self.b_io) + F.linear(hx, self.w_ho, self.b_ho) + F.linear(cy, self.w_cyo, self.b_cyo)
         outgate = torch.sigmoid(outgate)
