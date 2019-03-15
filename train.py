@@ -11,7 +11,7 @@ import datautil
 
 from util import stderr_print
 
-torch.manual_seed(123)
+#torch.manual_seed(123)
 
 evaluate_on_test_data = False
 
@@ -19,16 +19,17 @@ evaluate_on_test_data = False
 
 hyperparams = {
     # learning rate
-    "learning_rate": 0.01,
+    "learning_rate": 0.02,
+    #"learning_rate": 1,
 
     # numbers of the training epochs
-    "number_of_epochs": 8,
+    "number_of_epochs": 20,
 
     # mini-batch size
-    "batch_size": 256,
+    "batch_size": 10,
 
     # size of the hidden layer
-    "rnn_layer_size": 128,
+    "rnn_layer_size": 100,
 
     # number of hidden layers
     "rnn_layer_number": 1,
@@ -42,19 +43,26 @@ hyperparams = {
     #"cell_type": "PEEP",      # Peephole cell (VG task only)
 
     # dropout
-    "dropout_rate": 0.2,
+    "dropout_rate": 0,
 
     # optimizer type
+
     #"optimizer": optim.Adam,
-    "optimizer": optim.Adagrad,
+    "optimizer": optim.SGD,
+    #"optimizer": optim.Adadelta,
+    #"optimizer": optim.RMSprop,
+    #"optimizer": optim.Adagrad,
 
     # loss function
-    "loss_function": nn.NLLLoss,
-    #"loss_function": nn.CrossEntropyLoss,
+    #"loss_function": nn.NLLLoss,
+    "loss_function": nn.CrossEntropyLoss, #good
 
     # activation function
     #"activation": nn.Softmax,
-    "activation": nn.LogSoftmax,
+    #"activation": nn.LogSoftmax,
+    #"activation": nn.ReLU,
+    "activation": nn.Tanh,
+    #"activation": nn.Sigmoid,
 }
 
 # The dataparameter dictionary contains parameters related to the data.
@@ -132,6 +140,9 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
 
         train_confm = util.ConfusionMatrix(tagset_size, ignore_index=0)
 
+        model = model.train()
+        #model.hidden = model.init_hidden(batch_size)
+
         # Training minibatch loop
         for batch_n, (X, Y, L) in enumerate(train_loader):
             stderr_print("Epoch {:>3d}: Training   |{}| {}".format(epoch,
@@ -161,6 +172,8 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
 
         dev_confm = util.ConfusionMatrix(tagset_size, ignore_index=0)
 
+        model = model.eval()
+
         # Validation minibatch loop
         # It has the same flow as the training loop above, with the exception
         # of using torch.no_grad() to prevent modifying the weights
@@ -184,25 +197,28 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
 
         stderr_print("\x1b[2K", end="")
 
-        results = {"epoch": epoch, "train_loss": train_loss, "dev_loss": dev_loss,
-                   "train_acc": train_confm.accuracy(), "dev_acc": dev_confm.accuracy(),
-                   "train_f1": train_confm.f_score(mean=True), "dev_f1": dev_confm.f_score(mean=True)}
+        results = {"epoch": epoch, "train_loss": train_loss.data, "dev_loss": dev_loss.data,
+                   "train_acc": train_confm.accuracy().data, "dev_acc": dev_confm.accuracy().data,
+                   "train_f1": train_confm.f_score(mean=True).data, "dev_f1": dev_confm.f_score(mean=True).data}
         training_log.append(results)
         print("{epoch:d}\t{train_loss:.4f}\t{dev_loss:.4f}\t{train_acc:.4f}\t"
               "{dev_acc:.4f}\t{train_f1:.4f}\t{dev_f1:.4f}".format(**results))
 
         # Save the current model if has the lowest validation loss
         if best_model[0] is None or best_model[0] > results["dev_loss"]:
-            torch.save(model, f"{output_dir}/{TIMESTAMP}-best.bin")
+            torch.save(model, f"{output_dir}/{TIMESTAMP}.check")
             best_model = (results["dev_loss"], epoch)
 
     print()
     print("Training finished in {:02d}:{:02d}:{:02d}.".format(*timer.since_start()))
 
-    torch.save(model, f"{output_dir}/{TIMESTAMP}-final.bin")
+    # Load the best model
     if best_model[1] != epoch:
         print("Loading model with the lowest validation loss (Epoch {}).".format(best_model[1]))
-        model = torch.load(f"{output_dir}/{TIMESTAMP}-best.bin")
+        model = torch.load(f"{output_dir}/{TIMESTAMP}.check")
+
+    # Clean up checkpoint file
+    os.remove(f"{output_dir}/{TIMESTAMP}.check")
 
     return model, training_log
 
@@ -217,6 +233,8 @@ def predict(model, data, loss_function, batch_size, tagset_size, class_dict, out
     n_batches = len(dataloader)
 
     confm = util.ConfusionMatrix(tagset_size, ignore_index=0)
+
+    model = model.eval()
 
     for batch_n, (X, Y, sent_len) in enumerate(dataloader):
         stderr_print("Predicting |{}|".format(util.loadbar(batch_n / (n_batches - 1))), end="\r")
@@ -283,6 +301,12 @@ def main():
           class_dict=i2tag,
           **hyperparams,
           **dataparams)
+
+    torch.save({"model": model, "emb_file": dataparams["emb_file"],
+                "tag_file": dataparams["tag_file"], "padding_id": hyperparams["padding_id"]},
+               "{}/{}-final.model".format(dataparams["output_dir"], TIMESTAMP))
+
+    util.dictlist_to_csv(training_log, "{}/{}-log.csv".format(dataparams["output_dir"], TIMESTAMP))
 
     print()
     print("Evaluating on dev data.")

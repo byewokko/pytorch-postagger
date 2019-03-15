@@ -118,7 +118,11 @@ class RNNTagger(nn.Module):
         self.hidden_layer = None
         self.dropout_layer = nn.Dropout(self.dropout_rate)
         self.dense_layer = nn.Linear(self.rnn_out_size, self.tagset_size)
-        self.activation_layer = self.activation(dim=1)
+
+        if self.activation in (nn.LogSoftmax, nn.Softmax):
+            self.activation_layer = self.activation(dim=1)
+        else:
+            self.activation_layer = self.activation()
 
     def init_hidden(self, batch_size):
         """
@@ -193,7 +197,7 @@ class RNNTagger(nn.Module):
         # The shape of the output of the RNN layer is (batch_size, max_sentence_len, rnn_layer_size).
         # To be able to pass the tensor on to the dense (linear) layer, we need to reshape it by
         # collapsing the first two dimensions. Use the .view() method to do that.
-        # The new shape of the output should be (batch_size * max_sentence_len, rnn_layer_size).
+        # The new shape of the output should be (batch_size * max_sentence_len, rnn_out_size).
 
         # However, first the tensor needs to me made contiguous. This does not affect its shape nor
         # contents, it only reorganizes the underlying data structure. It is a necessary step before
