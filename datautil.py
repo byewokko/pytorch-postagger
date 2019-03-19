@@ -1,3 +1,4 @@
+from nltk import tokenize
 import re
 import torch
 import torch.nn.functional as F
@@ -66,6 +67,63 @@ def normalize_line(line):
     return line
 
 
+def prepare_raw_text(file_object, word2i, pad_id=0, unk_id=1, language="english"):
+    X_words = []
+    X = []
+    L = []
+    ids = []
+    sent_maxlength = 0
+
+    # Tokenize and convert words to ids
+    for line in file_object:
+        sents = tokenize.sent_tokenize(line.strip(), language=language)
+        for sent in sents:
+            ids.append(len(ids))
+            words = tokenize.word_tokenize(sent, language=language)
+            L.append(len(words))
+            if len(words) > sent_maxlength:
+                sent_maxlength = len(words)
+            X_words.append(words)
+            x = []
+            for word in words:
+                word = re.sub("([0-9][0-9.,]*)", "0", word)
+                if word in word2i:
+                    x.append(word2i[word])
+                elif word.lower() in word2i:
+                    x.append(word2i[word.lower()])
+                else:
+                    x.append(unk_id)
+            X.append(x)
+
+    # Padding to the length of the longest sentence
+    X_padded = []
+    for x in X:
+        x_padded = F.pad(torch.LongTensor(x),
+                         pad=(0, (sent_maxlength - len(x))),
+                         mode="constant",
+                         value=pad_id)
+        X_padded.append(x_padded)
+
+    return torch.LongTensor(ids), torch.stack(X_padded), torch.LongTensor(L), X_words
+
+
+def pair_words_with_tags(X_words, Y_h, L, i2tag):
+    text_out = []
+    for words, preds, length in zip(X_words, Y_h, L):
+        sent_out = []
+        for i in range(length):
+            word = words[i]
+            tag = i2tag[preds[i].item()]
+            sent_out.append((word, tag))
+        text_out.append(sent_out)
+    return text_out
+
+
+def print_words_with_tags(paired):
+    for sent in paired:
+        print(" ".join(["_".join(pair) for pair in sent]))
+
+
 def prepare_data(filename, word2i, tag2i, sent_maxlength, padding=None):
     """
     Load data and convert into tensors
@@ -111,7 +169,7 @@ def prepare_data(filename, word2i, tag2i, sent_maxlength, padding=None):
         return data
 
 
-def sort_batch(X, Y, L):
+def sort_batch(X, Y, L, descending=True):
     """
     Sort batch according to length L.
     :param X:
@@ -119,7 +177,7 @@ def sort_batch(X, Y, L):
     :param L:
     :return:
     """
-    L_sorted, idx_sorted = L.sort(0, descending=True)
+    L_sorted, idx_sorted = L.sort(0, descending=descending)
     X_sorted = X[idx_sorted]
     Y_sorted = Y[idx_sorted]
 

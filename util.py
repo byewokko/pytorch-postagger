@@ -2,6 +2,7 @@ import sys
 import time
 import torch
 
+from copy import deepcopy
 from datetime import datetime
 
 
@@ -53,12 +54,13 @@ class ConfusionMatrix():
     """
 
     # TODO NaNs
-    def __init__(self, n_classes, ignore_index=None):
+    def __init__(self, n_classes, ignore_index=None, class_dict=None):
         self.n_classes = n_classes
         self.matrix = torch.zeros((n_classes, n_classes), dtype=torch.float)
         # ignore_index is used for ignoring the padding token
         self.ignore_index = ignore_index
         self.filter = torch.LongTensor([i for i in range(n_classes) if i is not ignore_index])
+        self.class_dict = class_dict
 
     def __repr__(self):
         return repr(self.matrix.int())
@@ -68,6 +70,9 @@ class ConfusionMatrix():
 
     def reset(self):
         self.matrix = torch.zeros((self.n_classes, self.n_classes), dtype=torch.float)
+
+    def copy(self):
+        return deepcopy(self)
 
     def add(self, predictions, targets):
         if predictions.numel() != targets.numel():
@@ -114,7 +119,9 @@ class ConfusionMatrix():
         else:
             return matrix.sum(dim=0) / matrix.sum()
 
-    def print_class_stats(self, class_dict, fscore_b2=1):
+    def print_class_stats(self, class_dict=None, fscore_b2=1):
+        if not class_dict:
+            class_dict = self.class_dict
         precision = self.precision()
         recall = self.recall()
         f_score = self.f_score(b2=fscore_b2)
@@ -128,7 +135,9 @@ class ConfusionMatrix():
                                                     mean_without_nan(recall),
                                                     mean_without_nan(f_score)))
 
-    def matrix_to_csv(self, class_dict, filename, ignore_ignore=False):
+    def matrix_to_csv(self, filename, class_dict=None):
+        if not class_dict:
+            class_dict = self.class_dict
         with open(filename, "w") as csv:
             print(",".join([""] + [class_dict[i] for i in range(self.n_classes)]), file=csv)
             for i in range(self.n_classes):

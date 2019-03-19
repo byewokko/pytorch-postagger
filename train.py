@@ -11,7 +11,7 @@ import datautil
 
 from util import stderr_print
 
-#torch.manual_seed(123)
+# torch.manual_seed(123)
 
 evaluate_on_test_data = False
 
@@ -19,14 +19,14 @@ evaluate_on_test_data = False
 
 hyperparams = {
     # learning rate
-    "learning_rate": 0.02,
-    #"learning_rate": 1,
+    "learning_rate": 0.01,
+    # "learning_rate": 1,
 
     # numbers of the training epochs
-    "number_of_epochs": 20,
+    "number_of_epochs": 1,
 
     # mini-batch size
-    "batch_size": 10,
+    "batch_size": 512,
 
     # size of the hidden layer
     "rnn_layer_size": 100,
@@ -40,29 +40,29 @@ hyperparams = {
     # RNN cell type
     "cell_type": "RNN_TANH",  # Basic RNN
     #"cell_type": "LSTM",
-    #"cell_type": "PEEP",      # Peephole cell (VG task only)
+    # "cell_type": "PEEP",      # Peephole cell (VG task only)
 
     # dropout
-    "dropout_rate": 0,
+    "dropout_rate": 0.4,
 
     # optimizer type
 
-    #"optimizer": optim.Adam,
-    "optimizer": optim.SGD,
-    #"optimizer": optim.Adadelta,
-    #"optimizer": optim.RMSprop,
-    #"optimizer": optim.Adagrad,
+    "optimizer": optim.Adam,
+    # "optimizer": optim.SGD,
+    # "optimizer": optim.Adadelta,
+    # "optimizer": optim.RMSprop,
+    # "optimizer": optim.Adagrad,
 
     # loss function
-    #"loss_function": nn.NLLLoss,
-    "loss_function": nn.CrossEntropyLoss, #good
+    # "loss_function": nn.NLLLoss,
+    "loss_function": nn.CrossEntropyLoss,
 
     # activation function
-    #"activation": nn.Softmax,
-    #"activation": nn.LogSoftmax,
-    #"activation": nn.ReLU,
-    "activation": nn.Tanh,
-    #"activation": nn.Sigmoid,
+    # "activation": nn.Softmax,
+    # "activation": nn.LogSoftmax,
+    "activation": nn.ReLU,
+    # "activation": nn.Tanh,
+    # "activation": nn.Sigmoid,
 }
 
 # The dataparameter dictionary contains parameters related to the data.
@@ -72,8 +72,9 @@ hyperparams = {
 dataparams = {
     # if you want your model to be saved,
     # specify output_dir
-    #"output_dir": None,
     "output_dir": "out",
+    "save_log": False,
+    "save_conf_matrix": False,
 
     # data directory
     "data_dir": "/nobackup/tmp/ml2019/datasets/english",
@@ -84,7 +85,7 @@ dataparams = {
 
     # embedding file
     "emb_file": "/nobackup/tmp/ml2019/glove/english.glove.tiny.txt",
-    #"emb_file": "/nobackup/tmp/ml2019/glove/english.glove.6B.50d.txt",
+    # "emb_file": "/nobackup/tmp/ml2019/glove/english.glove.6B.50d.txt",
 
     # padding token
     "padding_token": "<PAD>",
@@ -104,9 +105,8 @@ dataparams["test_file"] = os.path.join(dataparams["data_dir"], dataparams["test_
 TIMESTAMP = util.timestamp()
 
 
-def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size, loss_function, optimizer,
-          learning_rate, output_dir=None, **kwargs):
-
+def train(model, train_data, dev_data, number_of_epochs, batch_size, loss_function, optimizer,
+          learning_rate, output_dir, conf_matrix, **kwargs):
     # Initialize the optimizer
     optimizer = optimizer(model.parameters(), lr=learning_rate)
 
@@ -124,10 +124,15 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
 
     n_train_batches = len(train_loader)
     n_dev_batches = len(dev_loader)
-    total_iter = number_of_epochs*(n_train_batches + n_dev_batches)
+    total_iter = number_of_epochs * (n_train_batches + n_dev_batches)
+
+    # Set up variables for logging and timing
 
     training_log = []
     best_model = (None, None)
+
+    train_confm = conf_matrix.copy()
+    dev_confm = conf_matrix.copy()
 
     timer = util.Timer()
     timer.start()
@@ -138,16 +143,18 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
 
     for epoch in range(1, number_of_epochs + 1):
 
-        train_confm = util.ConfusionMatrix(tagset_size, ignore_index=0)
+        train_confm.reset()
+        dev_confm.reset()
 
+        # Switch model to training mode
         model = model.train()
-        #model.hidden = model.init_hidden(batch_size)
+        train_loss = 0
 
         # Training minibatch loop
         for batch_n, (X, Y, L) in enumerate(train_loader):
             stderr_print("Epoch {:>3d}: Training   |{}| {}".format(epoch,
-                                                            util.loadbar(batch_n/(n_train_batches-1)),
-                                                            timer.remaining(total_iter)), end="\r")
+                                                                   util.loadbar(batch_n / (n_train_batches - 1)),
+                                                                   timer.remaining(total_iter)), end="\r")
 
             # Reset the gradient descent and the hidden layers
             model.zero_grad()
@@ -164,23 +171,24 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
             train_confm.add(pred_tags, Y.view(-1))
 
             # We compute the loss and update the weights with gradient descent
-            train_loss = loss_function(Y_h, Y.view(-1))
-            train_loss.backward()
+            loss = loss_function(Y_h, Y.view(-1))
+            loss.backward()
             optimizer.step()
+            train_loss += loss
 
             timer.tick()
 
-        dev_confm = util.ConfusionMatrix(tagset_size, ignore_index=0)
-
+        # Switch model to evaluation mode
         model = model.eval()
+        dev_loss = 0
 
         # Validation minibatch loop
         # It has the same flow as the training loop above, with the exception
         # of using torch.no_grad() to prevent modifying the weights
         for batch_n, (X, Y, L) in enumerate(dev_loader):
             stderr_print("Epoch {:>3d}: Validation |{}| {}".format(epoch,
-                                                            util.loadbar(batch_n/(n_dev_batches-1)),
-                                                            timer.remaining(total_iter)), end="\r")
+                                                                   util.loadbar(batch_n / (n_dev_batches - 1)),
+                                                                   timer.remaining(total_iter)), end="\r")
 
             model.zero_grad()
             model.hidden = model.init_hidden(batch_size=len(L))
@@ -190,18 +198,18 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
             dev_confm.add(pred_tags, Y)
 
             with torch.no_grad():
-                dev_loss = loss_function(Y_h, Y.view(-1))
-
+                dev_loss += loss_function(Y_h, Y.view(-1))
 
             timer.tick()
 
         stderr_print("\x1b[2K", end="")
 
-        results = {"epoch": epoch, "train_loss": train_loss.data, "dev_loss": dev_loss.data,
+        # Record the results
+        results = {"epoch": epoch, "train_loss": train_loss.data/len(train_data), "dev_loss": dev_loss.data/len(dev_data),
                    "train_acc": train_confm.accuracy().data, "dev_acc": dev_confm.accuracy().data,
                    "train_f1": train_confm.f_score(mean=True).data, "dev_f1": dev_confm.f_score(mean=True).data}
         training_log.append(results)
-        print("{epoch:d}\t{train_loss:.4f}\t{dev_loss:.4f}\t{train_acc:.4f}\t"
+        print("{epoch:d}\t{train_loss:.1e}\t{dev_loss:.1e}\t{train_acc:.4f}\t"
               "{dev_acc:.4f}\t{train_f1:.4f}\t{dev_f1:.4f}".format(**results))
 
         # Save the current model if has the lowest validation loss
@@ -214,7 +222,7 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
 
     # Load the best model
     if best_model[1] != epoch:
-        print("Loading model with the lowest validation loss (Epoch {}).".format(best_model[1]))
+        print(f"Loading model with the lowest validation loss (Epoch {best_model[1]}).")
         model = torch.load(f"{output_dir}/{TIMESTAMP}.check")
 
     # Clean up checkpoint file
@@ -223,43 +231,38 @@ def train(model, train_data, dev_data, number_of_epochs, batch_size, tagset_size
     return model, training_log
 
 
-def predict(model, data, loss_function, batch_size, tagset_size, class_dict, output_dir=None, **kwargs):
-
+def batch_predict(model, data, loss_function, batch_size, conf_matrix, loadtext="Evaluating", **kwargs):
     dataloader = torch.utils.data.DataLoader(data,
                                              batch_size=batch_size,
                                              shuffle=False,
                                              num_workers=8,
                                              collate_fn=datautil.pad_sort_batch)
     n_batches = len(dataloader)
-
-    confm = util.ConfusionMatrix(tagset_size, ignore_index=0)
+    loss = 0
 
     model = model.eval()
 
     for batch_n, (X, Y, sent_len) in enumerate(dataloader):
-        stderr_print("Predicting |{}|".format(util.loadbar(batch_n / (n_batches - 1))), end="\r")
+        stderr_print("{} |{}|".format(loadtext, util.loadbar(batch_n / (n_batches - 1))), end="\r")
         sys.stdout.flush()
-
-        max_sent = max(sent_len)
 
         model.init_hidden(batch_size=len(sent_len))
 
         Y_h = model(X, sent_len)
         with torch.no_grad():
-            loss = loss_function(Y_h, Y.view(-1))
+            loss += loss_function(Y_h, Y.view(-1))
 
         pred_tags = Y_h.max(dim=1)[1]
-        confm.add(pred_tags, Y)
+        conf_matrix.add(pred_tags, Y)
 
     stderr_print("\x1b[2K", end="")
-    confm.print_class_stats(class_dict)
-    if output_dir is not None:
-        confm.matrix_to_csv(class_dict, f"{output_dir}/{TIMESTAMP}-confmat.csv")
+
+    return loss
+
 
 #######################################
 
 def main():
-
     """
     Data preparation
     """
@@ -285,40 +288,54 @@ def main():
     test_data = datautil.prepare_data(dataparams["test_file"], word2i, tag2i, dataparams["input_len"])
     stderr_print("DONE")
 
-    """
-    Model preparation
-    """
+    # Set up the model
     hyperparams["loss_function"] = hyperparams["loss_function"](ignore_index=tag2i[dataparams["padding_token"]])
-
     model = tagger.RNNTagger(embedding_tensor=embeddings, **hyperparams)
-
     print()
     print("Number of trainable parameters:", sum(p.numel() for p in model.parameters() if p.requires_grad))
 
+    # Set up the confusion matrix to record our predictions
+    conf_matrix = util.ConfusionMatrix(hyperparams["tagset_size"],
+                                       ignore_index=tag2i[dataparams["padding_token"]],
+                                       class_dict=i2tag)
+
+    # Train the model
     model, training_log = train(model,
-          train_data=train_data,
-          dev_data=dev_data,
-          class_dict=i2tag,
-          **hyperparams,
-          **dataparams)
+                                train_data=train_data,
+                                dev_data=dev_data,
+                                conf_matrix=conf_matrix,
+                                **hyperparams,
+                                **dataparams)
 
-    torch.save({"model": model, "emb_file": dataparams["emb_file"],
+    torch.save({"model": model, "emb_file": dataparams["emb_file"], "tag_file": dataparams["tag_file"],
                 "tag_file": dataparams["tag_file"], "padding_id": hyperparams["padding_id"]},
-               "{}/{}-final.model".format(dataparams["output_dir"], TIMESTAMP))
+               f"{dataparams['output_dir']}/{TIMESTAMP}.model")
 
-    util.dictlist_to_csv(training_log, "{}/{}-log.csv".format(dataparams["output_dir"], TIMESTAMP))
+    if dataparams["save_log"]:
+        util.dictlist_to_csv(training_log, f"{dataparams['output_dir']}/{TIMESTAMP}-log.csv")
 
+    # Evaluate model on dev data
     print()
     print("Evaluating on dev data.")
-    predict(model, data=dev_data,
-            class_dict=i2tag,
-            **hyperparams,
-            **dataparams)
+    conf_matrix.reset()
+    loss = batch_predict(model, data=dev_data, conf_matrix=conf_matrix, **hyperparams, **dataparams)
+    print(loss)
 
+    conf_matrix.print_class_stats(i2tag)
+    if dataparams["save_conf_matrix"]:
+        conf_matrix.matrix_to_csv(f"{dataparams['output_dir']}/{TIMESTAMP}-confmat-eval.csv")
+
+    # Evaluate model on test data
     if evaluate_on_test_data:
         print()
         print("Evaluating on test data.")
-        predict(model, data=dev_data, class_dict=i2tag, **hyperparams)
+        conf_matrix.reset()
+        batch_predict(model, data=dev_data, conf_matrix=conf_matrix, **hyperparams)
+
+        conf_matrix.print_class_stats(i2tag)
+        if dataparams["save_conf_matrix"]:
+            conf_matrix.matrix_to_csv(f"{dataparams['output_dir']}/{TIMESTAMP}-confmat-eval.csv")
+
 
 if __name__ == "__main__":
     main()

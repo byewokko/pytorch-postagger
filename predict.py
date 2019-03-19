@@ -3,6 +3,8 @@ import nltk.tokenize
 import sys
 import torch
 
+from warnings import warn
+
 import datautil
 import util
 from util import stderr_print
@@ -10,32 +12,74 @@ from util import stderr_print
 parser = argparse.ArgumentParser(description="Predict POS tags.")
 parser.add_argument("-m", "--model-file")
 parser.add_argument("-f", "--input-file", default=None)
+parser.add_argument("-l", "--language", default="english")
 
 args = parser.parse_args()
 
 
-def predict(model, x):
-    Y = None
-    with torch.no_grad():
-        pass
-        # predict
+def predict(model, X, L):
 
-    return Y
+    model = model.eval()
+
+    stderr_print("Predicting ... ", end="")
+
+    model.init_hidden(batch_size=L.size(0))
+
+    Y_h = model(X, L)
+
+    predictions = Y_h.max(dim=1)[1]
+
+    stderr_print("DONE")
+
+    return predictions
 
 
 def main():
+    """
+    Load a trained model from file (-m) and use it to PoS-tag input file.
+    If no file is specified, read from stdin.
+    :return:
+    """
 
     # parse args (file/stdin, )
     input_file = args.input_file
     model_file = args.model_file
+    language = args.language
 
     # load model
-    stderr_print(f"Loading embeddings from {input_file} ... ", end="")
+    stderr_print(f"Loading embeddings from {input_file} ... ")
     loaded = torch.load(model_file)
-    model = loaded["model"]
-    emb_file = loaded["emb_file"]
-    tag_file = loaded["tag_file"]
-    padding_id = loaded["padding_id"]
+    try:
+        model = loaded["model"]
+    except KeyError:
+        raise Exception("Failed to load model.")
+
+    try:
+        emb_file = loaded["emb_file"]
+        stderr_print(f"Embedding file: {emb_file}")
+    except KeyError:
+        raise Exception("No embedding file specified.")
+
+    try:
+        tag_file = loaded["tag_file"]
+        stderr_print(f"Tag file: {tag_file}")
+    except KeyError:
+        raise Exception("No tag file specified.")
+
+    try:
+        padding_id = loaded["padding_id"]
+        stderr_print(f"Padding index: {padding_id}")
+    except KeyError:
+        padding_id = 0
+        warn("No padding index specified, defaulting to 0.")
+
+    try:
+        unknown_id = loaded["unknown_id"]
+        stderr_print(f"Unknown index: {unknown_id}")
+    except KeyError:
+        unknown_id = 0
+        warn("No unknown index specified, defaulting to 1.")
+
     stderr_print("DONE")
 
     # First we read the word embeddings file
@@ -50,25 +94,30 @@ def main():
     tagset_size = len(tag2i)
     stderr_print("DONE")
 
-    # read input text
+    # Read input text from file
+    # Read from stdin if no file (-f) is specified
     if input_file is not None:
         fin = open(input_file, "r")
     else:
         fin = sys.stdin
 
-    # move this to a new function, return a generator
-    for line in fin:
-        sent = nltk.tokenize.sent_tokenize(line.strip())
+    sent_ids, X, L, X_words = datautil.prepare_raw_text(fin, word2i, padding_id, unknown_id, language=language)
+    sent_ids, X, L = datautil.sort_batch(sent_ids, X, L)
 
-    # sent_tokenize if necessary
+    if input_file is not None:
+        fin.close()
 
-    # convert sentence to tensor
+    # Predict
+    Y_h = predict(model, X, L)
 
-    # predict
+    # Reshape flattened output tensor, match tag labels
+    # and pair them with input words
+    Y_h = Y_h.view(len(X_words), -1)
+    Y_h, L, sent_ids = datautil.sort_batch(Y_h, L, sent_ids, descending=False)
+    paired = datautil.pair_words_with_tags(X_words, Y_h, L, i2tag)
 
-    # convert output tensor to text
-
-    return
+    # Print to output in the word_TAG format
+    datautil.print_words_with_tags(paired)
 
 
 if __name__ == "__main__":
