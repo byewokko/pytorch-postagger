@@ -11,7 +11,7 @@ import datautil
 
 from util import stderr_print
 
-# torch.manual_seed(123)
+torch.manual_seed(123)
 
 evaluate_on_test_data = False
 
@@ -23,10 +23,10 @@ hyperparams = {
     # "learning_rate": 1,
 
     # numbers of the training epochs
-    "number_of_epochs": 2,
+    "number_of_epochs": 12,
 
     # mini-batch size
-    "batch_size": 512,
+    "batch_size": 256,
 
     # size of the hidden layer
     "rnn_layer_size": 100,
@@ -39,14 +39,13 @@ hyperparams = {
 
     # RNN cell type
     "cell_type": "RNN_TANH",  # Basic RNN
-    #"cell_type": "LSTM",
+    # "cell_type": "LSTM",
     # "cell_type": "PEEP",      # Peephole cell (VG task only)
 
     # dropout
-    "dropout_rate": 0.4,
+    "dropout_rate": 0,
 
     # optimizer type
-
     "optimizer": optim.Adam,
     # "optimizer": optim.SGD,
     # "optimizer": optim.Adadelta,
@@ -59,8 +58,8 @@ hyperparams = {
 
     # activation function
     # "activation": nn.Softmax,
-    # "activation": nn.LogSoftmax,
-    "activation": nn.ReLU,
+    "activation": nn.LogSoftmax,
+    # "activation": nn.ReLU,
     # "activation": nn.Tanh,
     # "activation": nn.Sigmoid,
 }
@@ -106,14 +105,13 @@ TIMESTAMP = util.timestamp()
 
 def train(model, train_loader, dev_loader, number_of_epochs, loss_function, optimizer,
           learning_rate, output_dir, conf_matrix, **kwargs):
-
     # Initialize the optimizer
     optimizer = optimizer(model.parameters(), lr=learning_rate)
 
     # Set up variables for logging and timing
     n_train_batches = len(train_loader)
     n_dev_batches = len(dev_loader)
-    total_iter = number_of_epochs * (n_train_batches + n_dev_batches)
+    total_iterations = number_of_epochs * (n_train_batches + n_dev_batches)
 
     training_log = []
     best_model = (None, None)
@@ -139,7 +137,7 @@ def train(model, train_loader, dev_loader, number_of_epochs, loss_function, opti
         for batch_n, (X, Y, L) in enumerate(train_loader):
             stderr_print("Epoch {:>3d}: Training   |{}| {}".format(epoch,
                                                                    util.loadbar(batch_n / (n_train_batches - 1)),
-                                                                   timer.remaining(total_iter)), end="\r")
+                                                                   timer.remaining(total_iterations)), end="\r")
 
             # Reset the gradient descent and the hidden layers
             model.zero_grad()
@@ -172,7 +170,7 @@ def train(model, train_loader, dev_loader, number_of_epochs, loss_function, opti
         # It has the same flow as the training loop above, with the exception
         # of using torch.no_grad() to prevent modifying the weights
         dev_loss = batch_predict(model, dev_loader, loss_function, dev_confm,
-                                 loadtext="Evaluating dev",
+                                 loadtext="Evaluating",
                                  timer=timer,
                                  mean_loss=True)
 
@@ -228,7 +226,7 @@ def batch_predict(model, data_loader, loss_function, conf_matrix,
     stderr_print("\x1b[2K", end="")
 
     if mean_loss:
-        return loss/len(data_loader.dataset)
+        return loss / len(data_loader.dataset)
     return loss
 
 
@@ -257,7 +255,8 @@ def main():
     dev_data = datautil.prepare_data(dataparams["dev_file"], word2i, tag2i, dataparams["input_len"])
     test_data = datautil.prepare_data(dataparams["test_file"], word2i, tag2i, dataparams["input_len"])
 
-    # Create dataloaders for batch processing
+    # Create dataloaders
+    # These object will create batches of data
     train_loader = torch.utils.data.DataLoader(train_data,
                                                batch_size=hyperparams["batch_size"],
                                                shuffle=True,
@@ -269,15 +268,18 @@ def main():
                                              num_workers=8,
                                              collate_fn=datautil.pad_sort_batch)
     test_loader = torch.utils.data.DataLoader(test_data,
-                                             batch_size=hyperparams["batch_size"],
-                                             shuffle=False,
-                                             num_workers=8,
-                                             collate_fn=datautil.pad_sort_batch)
+                                              batch_size=hyperparams["batch_size"],
+                                              shuffle=False,
+                                              num_workers=8,
+                                              collate_fn=datautil.pad_sort_batch)
     stderr_print("DONE")
 
     # Set up the model
     hyperparams["loss_function"] = hyperparams["loss_function"](ignore_index=0)
     model = tagger.RNNTagger(embedding_tensor=embeddings, **hyperparams)
+    print()
+    print("Hyperparameters:")
+    print("\n".join([f"{k}: {v}" for k, v in hyperparams.items()]))
     print()
     print("Number of trainable parameters:", sum(p.numel() for p in model.parameters() if p.requires_grad))
 
@@ -294,6 +296,7 @@ def main():
                                 **hyperparams,
                                 **dataparams)
 
+    # Save model and training log
     torch.save({"model": model,
                 "emb_file": dataparams["emb_file"],
                 "tag_file": dataparams["tag_file"],
