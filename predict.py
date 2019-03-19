@@ -110,8 +110,10 @@ def main():
     # Read input text from file
     # Read from stdin if no file (-f) is specified
     if input_file is not None:
+        stderr_print(f"Reading from {input_file}...")
         fin = open(input_file, "r")
     else:
+        stderr_print("Reading from standard input...")
         fin = sys.stdin
 
     sent_ids, X, L, X_words = datautil.prepare_raw_text(fin, word2i, pad_id=0, unk_id=1, language=language)
