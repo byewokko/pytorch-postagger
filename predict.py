@@ -12,7 +12,7 @@ from util import stderr_print
 parser = argparse.ArgumentParser(description="Predict POS tags.")
 parser.add_argument("-m", "--model-file")
 parser.add_argument("-f", "--input-file", default=None)
-parser.add_argument("-l", "--language", default="english")
+parser.add_argument("-l", "--language", default=None)
 
 args = parser.parse_args()
 
@@ -47,8 +47,9 @@ def main():
     language = args.language
 
     # load model
-    stderr_print(f"Loading embeddings from {input_file} ... ")
+    stderr_print(f"Loading model from {model_file} ... ")
     loaded = torch.load(model_file)
+
     try:
         model = loaded["model"]
     except KeyError:
@@ -67,18 +68,26 @@ def main():
         raise Exception("No tag file specified.")
 
     try:
-        padding_id = loaded["padding_id"]
-        stderr_print(f"Padding index: {padding_id}")
+        padding_emb = loaded["padding_emb"]
+        stderr_print(f"Padding embedding loaded.")
     except KeyError:
-        padding_id = 0
-        warn("No padding index specified, defaulting to 0.")
+        padding_emb = None
+        warn(f"No padding embedding specified, defaulting to embedding[0].")
 
     try:
-        unknown_id = loaded["unknown_id"]
-        stderr_print(f"Unknown index: {unknown_id}")
+        unknown_emb = loaded["unknown_emb"]
+        stderr_print(f"'Unknown' embedding loaded.")
     except KeyError:
-        unknown_id = 0
-        warn("No unknown index specified, defaulting to 1.")
+        unknown_emb = None
+        warn(f"No 'unknown' embedding specified, defaulting to embedding[1].")
+
+    if language is None:
+        try:
+            language = loaded["language"]
+            stderr_print(f"Language: {language}")
+        except KeyError:
+            language = "english"
+            warn(f"No language specified, defaulting to english.")
 
     stderr_print("DONE")
 
@@ -86,6 +95,10 @@ def main():
     # This function returns a word-to-index dictionary and the embedding tensor
     stderr_print(f"Loading embeddings from {emb_file} ... ", end="")
     word2i, _, embeddings = datautil.load_embeddings(emb_file)
+    if padding_emb is not None:
+        embeddings[0] = padding_emb
+    if unknown_emb is not None:
+        embeddings[1] = unknown_emb
     stderr_print("DONE")
 
     # Load and index POS tag list
@@ -101,7 +114,7 @@ def main():
     else:
         fin = sys.stdin
 
-    sent_ids, X, L, X_words = datautil.prepare_raw_text(fin, word2i, padding_id, unknown_id, language=language)
+    sent_ids, X, L, X_words = datautil.prepare_raw_text(fin, word2i, pad_id=0, unk_id=1, language=language)
     sent_ids, X, L = datautil.sort_batch(sent_ids, X, L)
 
     if input_file is not None:
