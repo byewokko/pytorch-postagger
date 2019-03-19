@@ -304,9 +304,11 @@ def main():
                 "unknown_emb": embeddings[1],
                 "language": dataparams["language"]},
                f"{dataparams['output_dir']}/{TIMESTAMP}.model")
+    print(f"Best model saved to {dataparams['output_dir']}/{TIMESTAMP}.model")
 
     if dataparams["save_log"]:
         util.dictlist_to_csv(training_log, f"{dataparams['output_dir']}/{TIMESTAMP}-log.csv")
+        print(f"Training log saved to {dataparams['output_dir']}/{TIMESTAMP}-log.csv")
 
     # Evaluate model on dev data
     print()
@@ -317,8 +319,10 @@ def main():
     conf_matrix.print_class_stats()
     print(f"Dev set accuracy: {conf_matrix.accuracy():.4f}")
     print(f"Dev set mean loss: {loss:8g}")
+    print()
     if dataparams["save_conf_matrix"]:
         conf_matrix.matrix_to_csv(f"{dataparams['output_dir']}/{TIMESTAMP}-confmat-dev.csv")
+        print(f"Confusion matrix saved to {dataparams['output_dir']}/{TIMESTAMP}-confmat-dev.csv")
 
     # Evaluate model on test data
     if evaluate_on_test_data:
@@ -330,8 +334,10 @@ def main():
         conf_matrix.print_class_stats()
         print(f"Test set accuracy: {conf_matrix.accuracy():.4f}")
         print(f"Test set mean loss: {loss:8g}")
+        print()
         if dataparams["save_conf_matrix"]:
             conf_matrix.matrix_to_csv(f"{dataparams['output_dir']}/{TIMESTAMP}-confmat-test.csv")
+            print(f"Confusion matrix saved to {dataparams['output_dir']}/{TIMESTAMP}-confmat-test.csv")
 
 
 if __name__ == "__main__":
